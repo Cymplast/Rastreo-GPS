@@ -34,6 +34,14 @@ function startTracking() {
     statusText.style.color = "#38a169";
     countdownText.textContent = "Pantalla segura";
 
+    // --- TRUCO DEL AUDIO FANTASMA ACTIVADO ---
+    const audio = document.getElementById('audioFantasma');
+    if (audio) {
+        audio.muted = false; // Le quitamos el silencio de código para el sistema
+        audio.volume = 0.01; // Lo dejamos inaudible para el usuario
+        audio.play().catch(err => console.log("El navegador bloqueó el auto-play de audio:", err));
+    }
+
     lastUpdateTime = Date.now();
 
     watchId = navigator.geolocation.watchPosition(
@@ -78,30 +86,6 @@ function processLocationUpdate(position) {
     
     // Si la distancia se filtró a 0, la velocidad en este tramo es automáticamente 0
     const speedKmh = distanceMeters > 0 ? (distanceKm / timeElapsedHours) : 0;
-
-    speedText.textContent = speedKmh.toFixed(2);
-    distanceText.textContent = distanceMeters.toFixed(2);
-    
-    const timestamp = new Date().toLocaleTimeString();
-    const recordId = currentTime.toString();
-
-    // Guardar registro de forma local en el teléfono
-    saveRecordLocally(recordId, workerNameInput.value.trim(), timestamp, distanceMeters, speedKmh);
-    agregarFilaTabla(recordId, timestamp, distanceMeters, speedKmh);
-    
-    // Intentar subir los datos a Google Sheets
-    syncData();
-
-    // Resetear variables para el siguiente ciclo de 2 minutos
-    lastPosition = currentCoords;
-    lastUpdateTime = currentTime;
-}
-
-    const timeElapsedHours = (currentTime - lastUpdateTime) / 1000 / 3600;
-    const distanceKm = distanceMeters / 1000;
-    
-    // Si hubo movimiento real calculamos velocidad, si no, usamos la del GPS o cero
-    const speedKmh = distanceMeters > 0 ? (distanceKm / timeElapsedHours) : (currentCoords.speed * 3.6 || 0);
 
     speedText.textContent = speedKmh.toFixed(2);
     distanceText.textContent = distanceMeters.toFixed(2);
@@ -204,6 +188,13 @@ function stopTracking() {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
     }
+
+    // --- APAGAR EL AUDIO FANTASMA ---
+    const audio = document.getElementById('audioFantasma');
+    if (audio) {
+        audio.pause();
+    }
+
     workerNameInput.disabled = false;
     startBtn.disabled = false;
     stopBtn.disabled = true;
