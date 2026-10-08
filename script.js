@@ -27,20 +27,37 @@ startBtn.addEventListener('click', () => {
     const name = workerNameInput.value.trim();
     if (!name) return alert("Por favor, introduce el nombre del trabajador.");
 
-    workerNameInput.disabled = true;
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-    statusText.textContent = "Rastreando en segundo plano nativo...";
-    statusText.style.color = "#38a169";
-    countdownText.textContent = "Modo App Activo";
+    // --- PASO CLAVE: Forzamos una consulta rápida para despertar el cuadro de permisos de Android ---
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            // Si el usuario acepta, arrancamos el rastreador continuo de fondo
+            console.log("Permiso GPS concedido.");
+            
+            workerNameInput.disabled = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            statusText.textContent = "Rastreando en segundo plano nativo...";
+            statusText.style.color = "#38a169";
+            countdownText.textContent = "Modo App Activo";
 
-    lastUpdateTime = Date.now();
+            lastUpdateTime = Date.now();
 
-    // Este es el rastreador continuo que la App Nativa mantendrá vivo en el bolsillo
-    watchId = navigator.geolocation.watchPosition(
-        processLocationUpdate,
-        err => console.error("Error GPS:", err),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            watchId = navigator.geolocation.watchPosition(
+                processLocationUpdate,
+                err => console.error("Error GPS Nativo:", err),
+                { 
+                    enableHighAccuracy: true, 
+                    timeout: 10000, 
+                    maximumAge: 0 
+                }
+            );
+        },
+        (err) => {
+            // Si el teléfono lo bloquea o el usuario dice que no
+            console.error("El permiso de ubicación fue denegado:", err);
+            alert("Para que la aplicación funcione, debes aceptar los permisos de ubicación en la pantalla.");
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
     );
 });
 
