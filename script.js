@@ -1,10 +1,10 @@
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCJfGjSYidRhkHcD9fNRZ8jYHCPgWZzECcbcN5i4kyd_DIrNlqTBplJE0leecpL5LX/exec"; 
+const WEB_APP_URL = "https://google.com"; 
 
 let watchId = null;
-let alarmInterval = null;
+let intervalId = null;
 let lastPosition = null;
 let lastUpdateTime = 0;
-const INTERVAL_TIME = 2 * 60 * 1000; // 2 minutos estrictos
+const INTERVAL_TIME = 2 * 60 * 1000; // 2 minutos exactos
 
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -16,8 +16,7 @@ const distanceText = document.getElementById('distance');
 const pendingCountText = document.getElementById('pendingCount');
 const logTableBody = document.querySelector('#logTable tbody');
 
-// Inicializar el almacenamiento interno de forma segura con corchetes obligatorios
-if (!localStorage.getItem('gps_tracks') || localStorage.getItem('gps_tracks') === '') {
+if (!localStorage.getItem('gps_tracks')) {
     localStorage.setItem('gps_tracks', '[]');
 }
 
@@ -28,52 +27,36 @@ startBtn.addEventListener('click', () => {
     const name = workerNameInput.value.trim();
     if (!name) return alert("Por favor, introduce el nombre del trabajador.");
 
-    // Solicitar permiso de notificaciones de forma limpia en Android
-    if (window.Notification && Notification.permission !== "granted") {
-        Notification.requestPermission();
-    }
-
     workerNameInput.disabled = true;
     startBtn.disabled = true;
     stopBtn.disabled = false;
-    statusText.textContent = "Rastreando con Despertador de Fondo Activo...";
+    statusText.textContent = "Rastreando ruta en tiempo real...";
     statusText.style.color = "#38a169";
-    countdownText.textContent = "Monitoreo de Velocidad Seguro";
+    countdownText.textContent = "Módulo de Alta Precisión Activo";
 
     lastUpdateTime = Date.now();
 
-    // Encendemos el rastreador continuo de coordenadas
+    // Activar lectura continua del chip GPS
     watchId = navigator.geolocation.watchPosition(
         (position) => { lastPosition = position.coords; },
-        err => console.error("Error GPS:", err),
+        err => console.error("Error lectura GPS:", err),
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
 
-    // ACTIVAMOS EL DESPERTADOR AUTOMÁTICO CADA 2 MINUTOS
-    alarmInterval = setInterval(ejecutarDespertadorReporte, INTERVAL_TIME);
+    // Bucle de tiempo estándar para evaluar tramos cada 2 minutos
+    intervalId = setInterval(procesarTramoDosMinutos, INTERVAL_TIME);
 });
 
-function ejecutarDespertadorReporte() {
-    if (!lastPosition) {
-        // Si el chip no ha capturado datos, forzamos una consulta de emergencia
-        navigator.geolocation.getCurrentPosition(
-            (pos) => { lastPosition = pos.coords; procesarYEnviarDatos(); },
-            (err) => console.error("Despertador sin GPS:", err),
-            { enableHighAccuracy: true, timeout: 5000 }
-        );
-    } else {
-        procesarYEnviarDatos();
-    }
-}
+function procesarTramoDosMinutos() {
+    if (!lastPosition) return console.log("Esperando señal GPS válida...");
 
-function procesarYEnviarDatos() {
     const currentTime = Date.now();
     
-    // Obtenemos la velocidad directa en km/h
-    let velocidadActual = lastPosition && lastPosition.speed ? (lastPosition.speed * 3.6) : 0;
+    // Obtener velocidad directa del chip GPS en km/h
+    let velocidadActual = lastPosition.speed ? (lastPosition.speed * 3.6) : 0;
     if (isNaN(velocidadActual) || velocidadActual < 0) velocidadActual = 0;
 
-    // Filtro de ruido: velocidades menores a 3 km/h se consideran detenido
+    // Filtro para ignorar el rebote del GPS si está quieto
     const velocidadFiltrada = velocidadActual > 3 ? velocidadActual : 0;
 
     speedText.textContent = velocidadFiltrada.toFixed(2);
@@ -81,22 +64,17 @@ function procesarYEnviarDatos() {
     
     const timestamp = new Date().toLocaleTimeString();
     
-    // Guardamos localmente
+    // Guardar localmente en el bloque de memoria del teléfono
     saveRecordLocally(currentTime.toString(), workerNameInput.value.trim(), timestamp, 0, velocidadFiltrada);
     
-    // Transmitimos de forma directa a Google Sheets
+    // Enviar a la hoja de Google Sheets
     syncData();
 
     lastUpdateTime = currentTime;
 }
 
 function saveRecordLocally(id, worker, hora, dist, vel) {
-    let localData = [];
-    try {
-        localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
-    } catch(e) {
-        localData = [];
-    }
+    let localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     localData.push({ id, worker, hora, dist: dist.toFixed(1), vel: vel.toFixed(2), synced: false });
     localStorage.setItem('gps_tracks', JSON.stringify(localData));
     renderTablaDesdeStorage();
@@ -105,18 +83,13 @@ function saveRecordLocally(id, worker, hora, dist, vel) {
 
 function renderTablaDesdeStorage() {
     logTableBody.innerHTML = '';
-    let localData = [];
-    try {
-        localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
-    } catch(e) {
-        localData = [];
-    }
+    const localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     localData.forEach(record => {
         const row = document.createElement('tr');
         row.id = `row-${record.id}`;
         row.innerHTML = `
             <td>${record.hora}</td>
-            <td>Vel: ${record.vel} km/h</td>
+            <td>${record.vel} km/h</td>
             <td>---</td>
             <td class="sync-status ${record.synced ? 'sync-ok' : 'sync-pending'}">
                 ${record.synced ? '☁️ OK' : '⌛ Local'}
@@ -127,24 +100,14 @@ function renderTablaDesdeStorage() {
 }
 
 function updatePendingCount() {
-    let localData = [];
-    try {
-        localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
-    } catch(e) {
-        localData = [];
-    }
+    const localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     const pending = localData.filter(r => !r.synced).length;
     pendingCountText.textContent = pending;
 }
 
 function syncData() {
     if (!navigator.onLine) return;
-    let localData = [];
-    try {
-        localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
-    } catch(e) {
-        localData = [];
-    }
+    let localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     
     localData.forEach(record => {
         if (record.synced) return;
@@ -159,13 +122,13 @@ function syncData() {
             renderTablaDesdeStorage();
             updatePendingCount();
         })
-        .catch(err => console.error(err));
+        .catch(err => console.error("Error de conexión:", err));
     });
 }
 
 stopBtn.addEventListener('click', () => {
     if (watchId) navigator.geolocation.clearWatch(watchId);
-    if (alarmInterval) clearInterval(alarmInterval);
+    if (intervalId) clearInterval(intervalId);
     workerNameInput.disabled = false;
     startBtn.disabled = false;
     stopBtn.disabled = true;
