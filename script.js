@@ -16,7 +16,7 @@ const distanceText = document.getElementById('distance');
 const pendingCountText = document.getElementById('pendingCount');
 const logTableBody = document.querySelector('#logTable tbody');
 
-// Inicializar contador al cargar la página
+// Inicializar contador seguro al cargar la página
 updatePendingCount();
 
 startBtn.addEventListener('click', startTracking);
@@ -37,8 +37,8 @@ function startTracking() {
     // --- TRUCO DEL AUDIO FANTASMA ACTIVADO ---
     const audio = document.getElementById('audioFantasma');
     if (audio) {
-        audio.muted = false; // Le quitamos el silencio de código para el sistema
-        audio.volume = 0.01; // Lo dejamos inaudible para el usuario
+        audio.muted = false; 
+        audio.volume = 0.01; 
         audio.play().catch(err => console.log("El navegador bloqueó el auto-play de audio:", err));
     }
 
@@ -75,7 +75,6 @@ function processLocationUpdate(position) {
     }
 
     // --- FILTRO ANTI-RUIDO GPS ---
-    // Si el movimiento detectado es menor a 15 metros, asumimos que el teléfono está quieto
     const UMBRAL_MOVIMIENTO_METROS = 15; 
     if (distanceMeters < UMBRAL_MOVIMIENTO_METROS) {
         distanceMeters = 0;
@@ -137,6 +136,7 @@ function agregarFilaTabla(id, hora, distancia, velocidad) {
     logTableBody.appendChild(row);
 }
 
+// Corrección total usando inicializador de corchetes '[]'
 function updatePendingCount() {
     const localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     const pending = localData.filter(r => !r.synced).length;
@@ -146,6 +146,7 @@ function updatePendingCount() {
 function syncData() {
     if (!navigator.onLine) return;
 
+    // Corrección total usando inicializador de corchetes '[]'
     let localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     
     localData.forEach(record => {
@@ -168,7 +169,7 @@ function syncData() {
                 cell.className = "sync-status sync-ok";
             }
             
-            // Actualizar el estado en el almacenamiento interno
+            // Corrección total usando inicializador de corchetes '[]'
             const updatedData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
             const index = updatedData.findIndex(r => r.id === record.id);
             if(index !== -1) updatedData[index].synced = true;
@@ -180,7 +181,6 @@ function syncData() {
     });
 }
 
-// Escuchar si el teléfono recupera conexión a internet
 window.addEventListener('online', syncData);
 
 function stopTracking() {
@@ -189,7 +189,6 @@ function stopTracking() {
         watchId = null;
     }
 
-    // --- APAGAR EL AUDIO FANTASMA ---
     const audio = document.getElementById('audioFantasma');
     if (audio) {
         audio.pause();
