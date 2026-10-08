@@ -1,4 +1,4 @@
-const WEB_APP_URL = "https://google.com"; 
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCJfGjSYidRhkHcD9fNRZ8jYHCPgWZzECcbcN5i4kyd_DIrNlqTBplJE0leecpL5LX/exec"; 
 
 let watchId = null;
 let intervalId = null;
