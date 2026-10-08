@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreador GPS Optimizado</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Rastreador de Ruta Pro</h2>
+        
+        <div class="input-group">
+            <label for="workerName">Nombre del Trabajador:</label>
+            <input type="text" id="workerName" placeholder="Ej. Juan Pérez">
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn btn-start">Iniciar Viaje</button>
+            <button id="stopBtn" class="btn btn-stop" disabled>Detener Viaje</button>
+        </div>
+
+        <div class="status-panel">
+            <p><strong>Estado:</strong> <span id="status">Inactivo</span></p>
+            <p><strong>Siguiente lectura en:</strong> <span id="countdown">Pantalla segura</span></p>
+            <p><strong>Última Velocidad:</strong> <span id="speed">0.00</span> km/h</p>
+            <p><strong>Distancia de tramo:</strong> <span id="distance">0.00</span> metros</p>
+            <p><strong>Pendientes de envío:</strong> <span id="pendingCount">0</span> registros</p>
+        </div>
+
+        <h3>Historial del Viaje Actual</h3>
+        <div class="table-container">
+            <table id="logTable">
+                <thead>
+                    <tr>
+                        <th>Hora</th>
+                        <th>Distancia (m)</th>
+                        <th>Velocidad (km/h)</th>
+                        <th>Nube</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Datos dinámicos -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
