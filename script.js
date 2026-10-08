@@ -1,4 +1,4 @@
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCJfGjSYidRhkHcD9fNRZ8jYHCPgWZzECcbcN5i4kyd_DIrNlqTBplJE0leecpL5LX/exec"; 
+const WEB_APP_URL = "https://google.com"; 
 
 let watchId = null;
 let lastPosition = null;
@@ -16,6 +16,7 @@ const distanceText = document.getElementById('distance');
 const pendingCountText = document.getElementById('pendingCount');
 const logTableBody = document.querySelector('#logTable tbody');
 
+// Inicializar contador al cargar la página
 updatePendingCount();
 
 startBtn.addEventListener('click', startTracking);
@@ -50,13 +51,13 @@ function processLocationUpdate(position) {
     const currentTime = Date.now();
     const currentCoords = position.coords;
 
-    // Si aún no han pasado los 2 minutos, solo actualizamos la última coordenada conocida
+    // Si aún no pasan los 2 minutos, guardamos la ubicación actual pero no mandamos reporte
     if (currentTime - lastUpdateTime < INTERVAL_TIME) {
         lastPosition = currentCoords;
         return;
     }
 
-    // Calculamos distancia (si no hay posición previa o estás quieto, será 0)
+    // Calculamos la distancia recorrida en este tramo
     let distanceMeters = 0;
     if (lastPosition) {
         distanceMeters = calculateHaversine(
@@ -68,7 +69,7 @@ function processLocationUpdate(position) {
     const timeElapsedHours = (currentTime - lastUpdateTime) / 1000 / 3600;
     const distanceKm = distanceMeters / 1000;
     
-    // Si te moviste usamos la velocidad calculada; si no, la que reporta el GPS (o 0)
+    // Si hubo movimiento real calculamos velocidad, si no, usamos la del GPS o cero
     const speedKmh = distanceMeters > 0 ? (distanceKm / timeElapsedHours) : (currentCoords.speed * 3.6 || 0);
 
     speedText.textContent = speedKmh.toFixed(2);
@@ -77,29 +78,68 @@ function processLocationUpdate(position) {
     const timestamp = new Date().toLocaleTimeString();
     const recordId = currentTime.toString();
 
-    // Guardamos y disparamos la sincronización pase lo que pase
+    // Guardar registro de forma local en el teléfono
     saveRecordLocally(recordId, workerNameInput.value.trim(), timestamp, distanceMeters, speedKmh);
     agregarFilaTabla(recordId, timestamp, distanceMeters, speedKmh);
+    
+    // Intentar subir los datos a Google Sheets
     syncData();
 
-    // Actualizamos los controles de tiempo y posición para el próximo ciclo
+    // Resetear variables para el siguiente ciclo de 2 minutos
     lastPosition = currentCoords;
     lastUpdateTime = currentTime;
 }
 
-// 2. REEMPLAZA POR COMPLETO TU FUNCIÓN syncData (Cambia la forma de enviar los datos)
+function calculateHaversine(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Radio de la Tierra en metros
+    const p1 = lat1 * Math.PI / 180;
+    const p2 = lat2 * Math.PI / 180;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(p1) * Math.cos(p2) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function saveRecordLocally(id, worker, hora, dist, vel) {
+    const localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
+    localData.push({ id, worker, hora, dist: dist.toFixed(1), vel: vel.toFixed(2), synced: false });
+    localStorage.setItem('gps_tracks', JSON.stringify(localData));
+    updatePendingCount();
+}
+
+function agregarFilaTabla(id, hora, distancia, velocidad) {
+    const row = document.createElement('tr');
+    row.id = `row-${id}`;
+    row.innerHTML = `
+        <td>${hora}</td>
+        <td>${distancia.toFixed(1)}</td>
+        <td>${velocidad.toFixed(2)}</td>
+        <td class="sync-status sync-pending">⌛ Local</td>
+    `;
+    logTableBody.appendChild(row);
+}
+
+function updatePendingCount() {
+    const localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
+    const pending = localData.filter(r => !r.synced).length;
+    pendingCountText.textContent = pending;
+}
+
 function syncData() {
-    if (WEB_APP_URL === ""https://script.google.com/macros/s/AKfycbwCJfGjSYidRhkHcD9fNRZ8jYHCPgWZzECcbcN5i4kyd_DIrNlqTBplJE0leecpL5LX/exec"" || !navigator.onLine) return;
+    if (!navigator.onLine) return;
 
     let localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     
     localData.forEach(record => {
         if (record.synced) return;
 
-        // CAMBIO CRUCIAL: Enviamos los parámetros limpios en la URL para evitar fallos de lectura en Google
+        // Construcción limpia de parámetros en la URL
         const urlConParametros = `${WEB_APP_URL}?trabajador=${encodeURIComponent(record.worker)}&hora=${encodeURIComponent(record.hora)}&distancia=${encodeURIComponent(record.dist)}&velocidad=${encodeURIComponent(record.vel)}`;
 
-        console.log("Enviando datos en la URL a Google Sheets...");
+        console.log("Sincronizando con Google Sheets...");
 
         fetch(urlConParametros, { 
             method: "POST", 
@@ -113,6 +153,7 @@ function syncData() {
                 cell.className = "sync-status sync-ok";
             }
             
+            // Actualizar el estado en el almacenamiento interno
             const updatedData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
             const index = updatedData.findIndex(r => r.id === record.id);
             if(index !== -1) updatedData[index].synced = true;
@@ -120,10 +161,11 @@ function syncData() {
             
             updatePendingCount();
         })
-        .catch(err => console.error("Error enviando registro diferido:", err));
+        .catch(err => console.error("Fallo de red al enviar:", err));
     });
 }
 
+// Escuchar si el teléfono recupera conexión a internet
 window.addEventListener('online', syncData);
 
 function stopTracking() {
