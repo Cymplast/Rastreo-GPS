@@ -66,6 +66,37 @@ function processLocationUpdate(position) {
         );
     }
 
+    // --- FILTRO ANTI-RUIDO GPS ---
+    // Si el movimiento detectado es menor a 15 metros, asumimos que el teléfono está quieto
+    const UMBRAL_MOVIMIENTO_METROS = 15; 
+    if (distanceMeters < UMBRAL_MOVIMIENTO_METROS) {
+        distanceMeters = 0;
+    }
+
+    const timeElapsedHours = (currentTime - lastUpdateTime) / 1000 / 3600;
+    const distanceKm = distanceMeters / 1000;
+    
+    // Si la distancia se filtró a 0, la velocidad en este tramo es automáticamente 0
+    const speedKmh = distanceMeters > 0 ? (distanceKm / timeElapsedHours) : 0;
+
+    speedText.textContent = speedKmh.toFixed(2);
+    distanceText.textContent = distanceMeters.toFixed(2);
+    
+    const timestamp = new Date().toLocaleTimeString();
+    const recordId = currentTime.toString();
+
+    // Guardar registro de forma local en el teléfono
+    saveRecordLocally(recordId, workerNameInput.value.trim(), timestamp, distanceMeters, speedKmh);
+    agregarFilaTabla(recordId, timestamp, distanceMeters, speedKmh);
+    
+    // Intentar subir los datos a Google Sheets
+    syncData();
+
+    // Resetear variables para el siguiente ciclo de 2 minutos
+    lastPosition = currentCoords;
+    lastUpdateTime = currentTime;
+}
+
     const timeElapsedHours = (currentTime - lastUpdateTime) / 1000 / 3600;
     const distanceKm = distanceMeters / 1000;
     
