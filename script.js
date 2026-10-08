@@ -3,9 +3,9 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwCJfGjSYidRhkHcD9f
 let watchId = null;
 let lastPosition = null;
 let lastUpdateTime = 0;
+let videoInterval = null;
 const INTERVAL_TIME = 2 * 60 * 1000; // 2 minutos
 
-// Elementos del DOM
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const workerNameInput = document.getElementById('workerName');
@@ -16,10 +16,7 @@ const distanceText = document.getElementById('distance');
 const pendingCountText = document.getElementById('pendingCount');
 const logTableBody = document.querySelector('#logTable tbody');
 
-// Cargar registros e intentar sincronizar al abrir la app
 updatePendingCount();
-renderTablaDesdeStorage();
-syncData();
 
 startBtn.addEventListener('click', startTracking);
 stopBtn.addEventListener('click', stopTracking);
@@ -32,9 +29,12 @@ function startTracking() {
     workerNameInput.disabled = true;
     startBtn.disabled = true;
     stopBtn.disabled = false;
-    statusText.textContent = "Rastreando en segundo plano (Guardado Local)...";
+    statusText.textContent = "Rastreando en tiempo real con GPS...";
     statusText.style.color = "#38a169";
-    countdownText.textContent = "Acumulando datos...";
+    countdownText.textContent = "Modo Continuo Forzado Activo";
+
+    // --- ACTIVAR TRUCO DE VIDEO FANTASMA ANTI-SUSPENSIÓN ---
+    activarVideoFantasma();
 
     lastUpdateTime = Date.now();
 
@@ -47,6 +47,25 @@ function startTracking() {
             maximumAge: 0
         }
     );
+}
+
+// Genera una transmisión de video falsa para engañar al sistema operativo del teléfono
+function activarVideoFantasma() {
+    const video = document.getElementById('videoFantasma');
+    const canvas = document.createElement('canvas');
+    canvas.width = 10;
+    canvas.height = 10;
+    const ctx = canvas.getContext('2d');
+    
+    // Dibujamos un cuadro parpadeante invisible de forma infinita
+    videoInterval = setInterval(() => {
+        ctx.fillStyle = ctx.fillStyle === '#000000' ? '#ffffff' : '#000000';
+        ctx.fillRect(0, 0, 10, 10);
+    }, 1000);
+
+    const stream = canvas.captureStream(10); // 10 cuadros por segundo
+    video.srcObject = stream;
+    video.play().catch(err => console.log("Bloqueo de reproducción automática evitado"));
 }
 
 function processLocationUpdate(position) {
@@ -66,7 +85,7 @@ function processLocationUpdate(position) {
         );
     }
 
-    // Filtro anti-ruido (10 metros)
+    // Filtro anti-ruido a 10 metros
     const UMBRAL_MOVIMIENTO_METROS = 10; 
     if (distanceMeters < UMBRAL_MOVIMIENTO_METROS) {
         distanceMeters = 0;
@@ -74,7 +93,9 @@ function processLocationUpdate(position) {
 
     const timeElapsedHours = (currentTime - lastUpdateTime) / 1000 / 3600;
     const distanceKm = distanceMeters / 1000;
-    const speedKmh = distanceMeters > 0 ? (distanceKm / timeElapsedHours) : 0;
+    
+    // Si hubo movimiento real calcula velocidad usando distancia, si no, usa la directa del chip GPS (o 0)
+    const speedKmh = distanceMeters > 0 ? (distanceKm / timeElapsedHours) : (currentCoords.speed * 3.6 || 0);
 
     speedText.textContent = speedKmh.toFixed(2);
     distanceText.textContent = distanceMeters.toFixed(2);
@@ -82,10 +103,8 @@ function processLocationUpdate(position) {
     const timestamp = new Date().toLocaleTimeString();
     const recordId = currentTime.toString();
 
-    // Guardar siempre de forma local primero
     saveRecordLocally(recordId, workerNameInput.value.trim(), timestamp, distanceMeters, speedKmh);
-    
-    // Intentar enviar inmediatamente (solo funcionará si la pantalla sigue encendida)
+    agregarFilaTabla(recordId, timestamp, distanceMeters, speedKmh);
     syncData();
 
     lastPosition = currentCoords;
@@ -108,29 +127,19 @@ function saveRecordLocally(id, worker, hora, dist, vel) {
     const localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
     localData.push({ id, worker, hora, dist: dist.toFixed(1), vel: vel.toFixed(2), synced: false });
     localStorage.setItem('gps_tracks', JSON.stringify(localData));
-    
-    // Refrescar la interfaz visual
-    renderTablaDesdeStorage();
     updatePendingCount();
 }
 
-function renderTablaDesdeStorage() {
-    logTableBody.innerHTML = '';
-    const localData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
-    
-    localData.forEach(record => {
-        const row = document.createElement('tr');
-        row.id = `row-${record.id}`;
-        row.innerHTML = `
-            <td>${record.hora}</td>
-            <td>${record.dist}</td>
-            <td>${record.vel}</td>
-            <td class="sync-status ${record.synced ? 'sync-ok' : 'sync-pending'}">
-                ${record.synced ? '☁️ OK' : '⌛ Local'}
-            </td>
-        `;
-        logTableBody.appendChild(row);
-    });
+function agregarFilaTabla(id, hora, distancia, velocidad) {
+    const row = document.createElement('tr');
+    row.id = `row-${id}`;
+    row.innerHTML = `
+        <td>${hora}</td>
+        <td>${distancia.toFixed(1)}</td>
+        <td>${velocidad.toFixed(2)}</td>
+        <td class="sync-status sync-pending">⌛ Local</td>
+    `;
+    logTableBody.appendChild(row);
 }
 
 function updatePendingCount() {
@@ -149,39 +158,38 @@ function syncData() {
 
         const urlConParametros = `${WEB_APP_URL}?trabajador=${encodeURIComponent(record.worker)}&hora=${encodeURIComponent(record.hora)}&distancia=${encodeURIComponent(record.dist)}&velocidad=${encodeURIComponent(record.vel)}`;
 
-        console.log("Enviando reporte pendiente a Google Sheets...");
-
         fetch(urlConParametros, { method: "POST", mode: "no-cors" })
         .then(() => {
-            // Marcar como sincronizado en la memoria
-            let currentData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
-            const index = currentData.findIndex(r => r.id === record.id);
-            if(index !== -1) currentData[index].synced = true;
-            localStorage.setItem('gps_tracks', JSON.stringify(currentData));
+            record.synced = true;
+            const cell = document.querySelector(`#row-${record.id} .sync-status`);
+            if (cell) {
+                cell.textContent = "☁️ OK";
+                cell.className = "sync-status sync-ok";
+            }
             
-            // Actualizar interfaz
-            renderTablaDesdeStorage();
+            const updatedData = JSON.parse(localStorage.getItem('gps_tracks') || '[]');
+            const index = updatedData.findIndex(r => r.id === record.id);
+            if(index !== -1) updatedData[index].synced = true;
+            localStorage.setItem('gps_tracks', JSON.stringify(updatedData));
             updatePendingCount();
         })
-        .catch(err => console.error("Error al sincronizar:", err));
+        .catch(err => console.error("Error al enviar:", err));
     });
 }
 
-// --- DETECTOR MÁGICO: SE DISPARA AL ENCENDER LA PANTALLA O VOLVER A LA APP ---
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        console.log("Pantalla encendida detectada. Forzando envío de datos pendientes...");
-        syncData();
-    }
-});
-
-// Forzar sincronización si el teléfono recupera internet repentinamente
 window.addEventListener('online', syncData);
 
 function stopTracking() {
     if (watchId) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
+    }
+    if (videoInterval) {
+        clearInterval(videoInterval);
+    }
+    const video = document.getElementById('videoFantasma');
+    if (video) {
+        video.srcObject = null;
     }
     workerNameInput.disabled = false;
     startBtn.disabled = false;
