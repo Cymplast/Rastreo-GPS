@@ -75,7 +75,7 @@ function processLocationUpdate(position) {
     }
 
     // --- FILTRO ANTI-RUIDO GPS OPTIMIZADO A 10 METROS ---
-    const UMBRAL_MOVIMIENTO_METROS = 5; 
+    const UMBRAL_MOVIMIENTO_METROS = 15; 
     if (distanceMeters < UMBRAL_MOVIMIENTO_METROS) {
         distanceMeters = 0;
     }
